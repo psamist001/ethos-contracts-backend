@@ -58,6 +58,10 @@ pub struct AppState {
     pub share_store: ShareStore,
     pub share_token_store: ShareTokenStore,
     pub consensus: Arc<crate::consensus::NodeCache>,
+    /// Webhook registry and HTTP delivery client (#65).
+    pub webhook_state: Arc<crate::webhook::WebhookState>,
+    /// GraphQL schema for the /graphql endpoint (#66).
+    pub graphql_schema: crate::graphql::EthosSchema,
 }
 
 impl axum::extract::FromRef<AppState> for Arc<Db> {
@@ -69,6 +73,18 @@ impl axum::extract::FromRef<AppState> for Arc<Db> {
 impl axum::extract::FromRef<AppState> for Arc<AppState> {
     fn from_ref(state: &AppState) -> Arc<AppState> {
         Arc::new(state.clone())
+    }
+}
+
+impl axum::extract::FromRef<AppState> for Arc<crate::webhook::WebhookState> {
+    fn from_ref(state: &AppState) -> Arc<crate::webhook::WebhookState> {
+        Arc::clone(&state.webhook_state)
+    }
+}
+
+impl axum::extract::FromRef<AppState> for crate::graphql::EthosSchema {
+    fn from_ref(state: &AppState) -> crate::graphql::EthosSchema {
+        state.graphql_schema.clone()
     }
 }
 

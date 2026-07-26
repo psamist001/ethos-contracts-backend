@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{
     extract::State,
     http::{HeaderValue, Method, StatusCode},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use tower_http::cors::CorsLayer;
@@ -16,7 +16,10 @@ use ethos_protocol_backend::{
         create_audit_store, create_event_store, create_share_store, create_share_token_store,
         create_vault_store, AppState, Db, PoolConfig,
     },
+    graphql::{build_schema, graphql_handler, graphql_playground},
     routes, scheduler,
+    streaming::{stream_events, stream_vaults},
+    webhook::{delete_webhook, list_webhooks, register_webhook, WebhookState},
 };
 
 #[cfg(test)]
@@ -87,9 +90,11 @@ async fn consensus_health_handler(
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        // ── Health ──────────────────────────────────────────────────────────
         .route("/health", get(health_handler))
         .route("/health/consensus", get(consensus_health_handler))
         .route("/ready", get(ready_handler))
+        // ── Legacy reminder / subscription routes ────────────────────────────
         .route(
             "/api/vaults/:vault_id/reminder-preferences",
             post(routes::set_preferences)
@@ -108,6 +113,15 @@ pub fn build_router(state: AppState) -> Router {
             "/api/vaults/:vault_id/simulate-release",
             get(routes::simulate_release),
         )
+        // ── Webhook routes (#65) ─────────────────────────────────────────────
+        .route("/webhooks", post(register_webhook).get(list_webhooks))
+        .route("/webhooks/:id", delete(delete_webhook))
+        // ── GraphQL routes (#66) ─────────────────────────────────────────────
+        .route("/graphql", post(graphql_handler))
+        .route("/graphql/playground", get(graphql_playground))
+        // ── Streaming routes (#67) ───────────────────────────────────────────
+        .route("/stream/vaults", get(stream_vaults))
+        .route("/stream/events", get(stream_events))
         .layer(build_cors_layer())
         .with_state(state)
 }
@@ -168,14 +182,20 @@ async fn main() {
         scheduler::run(scheduler_db).await;
     });
 
+    let vault_store = create_vault_store();
+    let event_store = create_event_store();
+    let graphql_schema = build_schema(Arc::clone(&vault_store), Arc::clone(&event_store));
+
     let state = AppState {
         db,
-        vault_store: create_vault_store(),
-        event_store: create_event_store(),
+        vault_store,
+        event_store,
         audit_store: create_audit_store(),
         share_store: create_share_store(),
         share_token_store: create_share_token_store(),
         consensus,
+        webhook_state: Arc::new(WebhookState::new()),
+        graphql_schema,
     };
 
     let app = build_router(state);

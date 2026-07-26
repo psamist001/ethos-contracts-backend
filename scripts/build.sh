@@ -21,4 +21,5 @@ done
 echo "Building Ethos-Protocol contracts..."
 cargo build --target wasm32-unknown-unknown --release --manifest-path contracts/ttl_vault/Cargo.toml
 cargo build --target wasm32-unknown-unknown --release --manifest-path contracts/zk_verifier/Cargo.toml
+cargo build --target wasm32-unknown-unknown --release --manifest-path contracts/sbt/Cargo.toml
 echo "Build complete."

@@ -18,7 +18,10 @@ use ethos_protocol_backend::{
         create_audit_store, create_event_store, create_share_store, create_share_token_store,
         create_vault_store, Db, PoolConfig,
     },
-    routes, AppState,
+    graphql::build_schema,
+    routes,
+    webhook::WebhookState,
+    AppState,
 };
 
 fn test_state(db: Arc<Db>) -> AppState {
@@ -29,14 +32,19 @@ fn test_state(db: Arc<Db>) -> AppState {
         backend,
         ConflictStrategy::LastWriteWins,
     ));
+    let vault_store = create_vault_store();
+    let event_store = create_event_store();
+    let graphql_schema = build_schema(Arc::clone(&vault_store), Arc::clone(&event_store));
     AppState {
         db,
-        vault_store: create_vault_store(),
-        event_store: create_event_store(),
+        vault_store,
+        event_store,
         audit_store: create_audit_store(),
         share_store: create_share_store(),
         share_token_store: create_share_token_store(),
         consensus,
+        webhook_state: Arc::new(WebhookState::new()),
+        graphql_schema,
     }
 }
 
@@ -304,6 +312,8 @@ async fn test_consensus_health_detects_and_resolves_divergence() {
         share_store: create_share_store(),
         share_token_store: create_share_token_store(),
         consensus,
+        webhook_state: Arc::new(WebhookState::new()),
+        graphql_schema: build_schema(create_vault_store(), create_event_store()),
     };
     db.migrate().unwrap();
 
